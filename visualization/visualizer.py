@@ -34,6 +34,15 @@ class Viewport:
     - a render state
     - a camera handler
     - a scene
+
+    The projection-rebuild fields (orthographic/ortho_width/fx/fy/cx/cy/
+    near/far) let PangolinVisualizer.render() recompute this viewport's
+    projection matrix against its *current* live pixel size every frame --
+    display.GetBounds() tracks window resizes automatically (Pangolin's own
+    layout system), but a projection matrix baked once at add_viewport()
+    time does not, so without this a resized window leaves stale-sized
+    content with whitespace/empty space around it instead of filling the
+    (correctly resized) box.
     """
 
     name: str
@@ -41,6 +50,15 @@ class Viewport:
     render_state: object
     handler: object
     scene: Scene
+    orthographic: bool = False
+    ortho_width: Optional[float] = None
+    fx: Optional[float] = None
+    fy: Optional[float] = None
+    cx: Optional[float] = None
+    cy: Optional[float] = None
+    near: float = 0.1
+    far: float = 1000.0
+    _last_px_size: Optional[tuple] = None
 
 
 class PangolinVisualizer:
@@ -134,6 +152,62 @@ class PangolinVisualizer:
     # Viewport Management
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _build_projection(
+        vp_px_w: int,
+        vp_px_h: int,
+        orthographic: bool,
+        ortho_width: Optional[float],
+        fx: Optional[float],
+        fy: Optional[float],
+        cx: Optional[float],
+        cy: Optional[float],
+        near: float,
+        far: float,
+        default_fx: float = 420.0,
+        default_fy: float = 420.0,
+    ):
+        vp_px_w = max(1, vp_px_w)
+        vp_px_h = max(1, vp_px_h)
+
+        if orthographic:
+            half_w = (2.0 if ortho_width is None else float(ortho_width)) / 2.0
+            half_h = half_w * (vp_px_h / vp_px_w)
+            return pango.ProjectionMatrixOrthographic(-half_w, half_w, -half_h, half_h, near, far)
+
+        return pango.ProjectionMatrix(
+            vp_px_w,
+            vp_px_h,
+            default_fx if fx is None else float(fx),
+            default_fy if fy is None else float(fy),
+            vp_px_w / 2.0 if cx is None else float(cx),
+            vp_px_h / 2.0 if cy is None else float(cy),
+            near,
+            far,
+        )
+
+    def _refresh_viewport_projection(self, viewport: Viewport) -> None:
+        """Rebuild this viewport's projection matrix if its live pixel size
+        (tracked by Pangolin's own resize-responsive layout, via
+        display.GetBounds()) has changed since the last check -- keeps
+        content correctly scaled to the panel instead of stale-sized with
+        whitespace around it after the main window is resized."""
+        bounds = viewport.display.GetBounds()
+        px_size = (max(1, int(bounds.w)), max(1, int(bounds.h)))
+
+        if px_size == viewport._last_px_size:
+            return
+
+        projection = self._build_projection(
+            px_size[0], px_size[1],
+            viewport.orthographic, viewport.ortho_width,
+            viewport.fx, viewport.fy, viewport.cx, viewport.cy,
+            viewport.near, viewport.far,
+            default_fx=self.fx, default_fy=self.fy,
+        )
+        viewport.render_state.SetProjectionMatrix(projection)
+        viewport._last_px_size = px_size
+
     def add_viewport(
         self,
         name: str,
@@ -151,6 +225,8 @@ class PangolinVisualizer:
         camera_target: ArrayLike = (0.0, 0.0, 0.0),
         camera_up=pango.AxisY,
         replace: bool = True,
+        orthographic: bool = False,
+        ortho_width: Optional[float] = None,
     ) -> Viewport:
         """
         Add a Pangolin sub-display/viewport.
@@ -171,6 +247,21 @@ class PangolinVisualizer:
         Bottom-right quadrant:
 
             left=0.5, right=1.0, bottom=0.0, top=0.5
+
+        The projection is scaled to this viewport's own pixel size (not the
+        full window's) -- otherwise content is framed as if seen through a
+        camera calibrated for the whole window and renders far too small
+        inside a smaller viewport. It's also recomputed every render() call
+        against the viewport's *current* pixel size, so resizing the main
+        window rescales each panel's content to fill it instead of leaving
+        stale-sized content with growing whitespace around it.
+
+        Pass `orthographic=True` for pure 2D content (e.g. an image plane
+        meant to exactly fill its panel): the projection becomes a
+        parallel-projection box sized to `ortho_width` world units wide,
+        with height derived from the viewport's own pixel aspect ratio so a
+        plane of that same aspect fills it exactly, with no FOV/distance
+        tuning needed.
         """
         if not replace and name in self.viewports:
             raise KeyError(f"Viewport '{name}' already exists")
@@ -181,25 +272,20 @@ class PangolinVisualizer:
         if not (0.0 <= bottom < top <= 1.0):
             raise ValueError("Expected 0 <= bottom < top <= 1")
 
-        fx = self.fx if fx is None else float(fx)
-        fy = self.fy if fy is None else float(fy)
-        cx = self.cx if cx is None else float(cx)
-        cy = self.cy if cy is None else float(cy)
         near = self.near if near is None else float(near)
         far = self.far if far is None else float(far)
 
         camera_eye = ensure_vec3(camera_eye, "camera_eye")
         camera_target = ensure_vec3(camera_target, "camera_target")
 
-        projection = pango.ProjectionMatrix(
-            self.width,
-            self.height,
-            fx,
-            fy,
-            cx,
-            cy,
-            near,
-            far,
+        viewport_width = max(1e-8, right - left)
+        viewport_height = max(1e-8, top - bottom)
+        vp_px_w = max(1, int(round(self.width * viewport_width)))
+        vp_px_h = max(1, int(round(self.height * viewport_height)))
+
+        projection = self._build_projection(
+            vp_px_w, vp_px_h, orthographic, ortho_width, fx, fy, cx, cy, near, far,
+            default_fx=self.fx, default_fy=self.fy,
         )
 
         model_view = pango.ModelViewLookAt(
@@ -219,13 +305,10 @@ class PangolinVisualizer:
 
         handler = pango.Handler3D(render_state)
 
-        viewport_width = max(1e-8, right - left)
-        viewport_height = max(1e-8, top - bottom)
-
-        aspect = -float(self.width * viewport_width) / float(
-            self.height * viewport_height
-        )
-
+        # No aspect argument -- the box exactly fills its Attach-fraction
+        # bounds with no internal Pangolin letterboxing; `_build_projection`
+        # (recomputed per-frame in render()) is what keeps content correctly
+        # scaled to that box's live pixel size instead.
         display = (
             pango.CreateDisplay()
             .SetBounds(
@@ -233,7 +316,6 @@ class PangolinVisualizer:
                 pango.Attach(top),
                 pango.Attach(left),
                 pango.Attach(right),
-                aspect,
             )
             .SetHandler(handler)
         )
@@ -244,6 +326,15 @@ class PangolinVisualizer:
             render_state=render_state,
             handler=handler,
             scene=Scene(),
+            orthographic=orthographic,
+            ortho_width=ortho_width,
+            fx=fx,
+            fy=fy,
+            cx=cx,
+            cy=cy,
+            near=near,
+            far=far,
+            _last_px_size=(vp_px_w, vp_px_h),
         )
 
         self.viewports[name] = viewport
@@ -420,6 +511,7 @@ class PangolinVisualizer:
         glClearColor(r, g, b, a)
 
         for viewport in self.viewports.values():
+            self._refresh_viewport_projection(viewport)
             viewport.display.Activate(viewport.render_state)
             viewport.scene.draw()
 
@@ -441,6 +533,7 @@ class PangolinVisualizer:
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
         vp = self.require_viewport(viewport)
+        self._refresh_viewport_projection(vp)
         vp.display.Activate(vp.render_state)
         vp.scene.draw()
 
@@ -473,8 +566,9 @@ class PangolinVisualizer:
         """
         Save current framebuffer as image using OpenCV.
         """
-        width = self.width
-        height = self.height
+        bounds = pango.DisplayBase().GetBounds()
+        width = max(1, int(bounds.w))
+        height = max(1, int(bounds.h))
 
         buffer = np.empty((height, width, 4), dtype=np.uint8)
 

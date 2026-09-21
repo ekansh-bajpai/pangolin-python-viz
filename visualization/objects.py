@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pypangolin as pango
@@ -243,6 +243,8 @@ class Trajectory(Drawable):
         axis_scale: float = 0.1,
         visible: bool = True,
         name: str = "trajectory",
+        color_by_age: bool = False,
+        age_gradient: Tuple[ColorLike, ColorLike] = ((0.0, 1.0, 1.0, 1.0), (1.0, 0.0, 0.6, 1.0)),
     ) -> None:
         super().__init__(
             name=name,
@@ -257,10 +259,20 @@ class Trajectory(Drawable):
         self.draw_latest_axis = bool(draw_latest_axis)
         self.axis_scale = float(axis_scale)
 
+        # When enabled, segments are colored oldest -> newest along
+        # age_gradient instead of a flat self.color -- lets an operator see
+        # at a glance which part of the trajectory is recent.
+        self.color_by_age = bool(color_by_age)
+        self.age_gradient = (as_color(age_gradient[0]), as_color(age_gradient[1]))
+
         if poses is not None:
             self.set_poses(poses)
         elif positions is not None:
             self.set_positions(positions)
+
+    def set_color_by_age(self, enabled: bool) -> "Trajectory":
+        self.color_by_age = bool(enabled)
+        return self
 
     def set_poses(self, poses: Iterable[ArrayLike]) -> "Trajectory":
         self.poses = [ensure_pose(T).copy() for T in poses]
@@ -298,15 +310,26 @@ class Trajectory(Drawable):
         if not self.visible:
             return
 
-        if len(self.positions) >= 2:
-            set_gl_color(self.color)
+        n = len(self.positions)
+        if n >= 2:
             glLineWidth(self.line_width)
 
-            glBegin(GL_LINES)
-            for p1, p2 in zip(self.positions[:-1], self.positions[1:]):
-                glVertex3d(float(p1[0]), float(p1[1]), float(p1[2]))
-                glVertex3d(float(p2[0]), float(p2[1]), float(p2[2]))
-            glEnd()
+            if self.color_by_age:
+                c0, c1 = self.age_gradient
+                glBegin(GL_LINES)
+                for i, (p1, p2) in enumerate(zip(self.positions[:-1], self.positions[1:])):
+                    t = i / (n - 2) if n > 2 else 1.0
+                    glColor4f(*(a + (b - a) * t for a, b in zip(c0, c1)))
+                    glVertex3d(float(p1[0]), float(p1[1]), float(p1[2]))
+                    glVertex3d(float(p2[0]), float(p2[1]), float(p2[2]))
+                glEnd()
+            else:
+                set_gl_color(self.color)
+                glBegin(GL_LINES)
+                for p1, p2 in zip(self.positions[:-1], self.positions[1:]):
+                    glVertex3d(float(p1[0]), float(p1[1]), float(p1[2]))
+                    glVertex3d(float(p2[0]), float(p2[1]), float(p2[2]))
+                glEnd()
 
         if self.draw_latest_axis and self.poses:
             Axis(
