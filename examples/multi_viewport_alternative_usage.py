@@ -409,7 +409,7 @@ def main() -> None:
     # Load trajectory if available, otherwise generate synthetic poses
     # -------------------------------------------------------------------------
 
-    trajectory_path = "viz/trajectory.txt"
+    trajectory_path = "trajectory.txt"
 
     if os.path.exists(trajectory_path):
         poses = load_tum_trajectory(trajectory_path)

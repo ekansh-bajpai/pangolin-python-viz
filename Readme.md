@@ -166,11 +166,16 @@ Python >= 3.8
 
 ## Python Dependencies
 
-Install common dependencies:
+Install from `requirements.txt` (in this repo):
 
 ```bash
-pip install numpy scipy PyOpenGL PyOpenGL_accelerate opencv-python
+pip install -r requirements.txt
 ```
+
+This is `numpy`, `scipy`, `PyOpenGL`, `PyOpenGL_accelerate`, and `opencv-python` — everything this
+package needs on its own, so it can be used standalone in any project that needs 3D visualization.
+`pypangolin` is intentionally not in `requirements.txt` — see below, it has to be built rather than
+`pip install`-ed.
 
 `opencv-python` is only required if you want to use:
 
@@ -200,35 +205,41 @@ scipy.spatial.transform.Rotation
 
 ## Pangolin / pypangolin
 
-You need Pangolin Python bindings.
+You need Pangolin's Python bindings (`pypangolin`). `pip install pypangolin` is unreliable — there
+isn't a maintained prebuilt wheel for most platforms, and several upstream/fork combinations were
+tried against this library and failed to build or link correctly against a real Python 3.10 + GL
+stack.
 
-Try:
-
-```bash
-pip install pypangolin
-```
-
-If that fails, build Pangolin from source.
-
-Typical system dependencies on Ubuntu may include:
+**Use this exact, verified-working fork and commit** — a frozen fork of
+[stevenlovegrove/Pangolin](https://github.com/stevenlovegrove/Pangolin) at
+[ekansh-bajpai/Pangolin](https://github.com/ekansh-bajpai/Pangolin), branch `frozen-working` (also
+tagged `working-v1`), kept as a stable backup independent of upstream's moving `master`:
 
 ```bash
-sudo apt update
-sudo apt install -y \
-    build-essential \
-    cmake \
-    libglew-dev \
-    libpython3-dev \
-    python3-dev \
-    python3-pip \
-    libegl1-mesa-dev \
-    libwayland-dev \
-    libxkbcommon-dev \
-    wayland-protocols \
-    libgl1-mesa-dev
+git clone --recursive -b frozen-working https://github.com/ekansh-bajpai/Pangolin.git
+cd Pangolin
 ```
 
-Then install/build Pangolin according to your environment.
+Install build dependencies (Ubuntu):
+
+```bash
+./scripts/install_prerequisites.sh -m apt recommended
+```
+
+Build Pangolin and its Python bindings, with your project's venv/conda env **active** (so the
+bindings build against the same Python/`pip` this package will run under):
+
+```bash
+cmake -B build
+cmake --build build
+cmake --build build -t pypangolin_pip_install
+```
+
+This installs `pypangolin` directly into your active environment. Verify with:
+
+```bash
+python -c "import pypangolin; print('pypangolin OK')"
+```
 
 ---
 
@@ -249,7 +260,7 @@ python examples/multi_viewport_alternative_layout.py
 If this file exists:
 
 ```text
-viz/trajectory.txt
+trajectory.txt
 ```
 
 the examples can load it as a TUM-style trajectory.
@@ -2967,7 +2978,7 @@ Example:
 ```python
 from visualization import load_tum_trajectory
 
-poses = load_tum_trajectory("viz/trajectory.txt")
+poses = load_tum_trajectory("trajectory.txt")
 ```
 
 Then:
@@ -3708,15 +3719,9 @@ For high-resolution images or multiple image planes, consider:
 
 ## `ModuleNotFoundError: No module named 'pypangolin'`
 
-Install Pangolin Python bindings.
-
-Try:
-
-```bash
-pip install pypangolin
-```
-
-If unavailable, build Pangolin from source.
+Build Pangolin's Python bindings from the verified-working fork — see
+[Pangolin / pypangolin](#pangolin--pypangolin) above. `pip install pypangolin` is not reliable
+enough to depend on.
 
 ---
 
@@ -4230,4 +4235,4 @@ load_tum_trajectory(path)
 
 # License
 
-Use and modify freely for your own projects.
+MIT — see [`LICENSE`](LICENSE). Use and modify freely for your own projects.

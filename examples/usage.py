@@ -122,7 +122,7 @@ def create_demo_image(
     return image
 
 
-def load_or_create_image(path: str = "viz/image.png") -> np.ndarray:
+def load_or_create_image(path: str = "image.png") -> np.ndarray:
     """
     Load an RGB image from disk if available, otherwise create a synthetic image.
     """
@@ -260,7 +260,7 @@ def main() -> None:
     # Add image plane object
     # -------------------------------------------------------------------------
 
-    initial_image = load_or_create_image("viz/image.png")
+    initial_image = load_or_create_image("image.png")
 
     image_pose = np.eye(4, dtype=np.float64)
     image_pose[:3, 3] = np.array([0.0, 0.0, 0.6], dtype=np.float64)
@@ -299,7 +299,7 @@ def main() -> None:
     # Load trajectory or generate synthetic trajectory
     # -------------------------------------------------------------------------
 
-    trajectory_path = "viz/trajectory.txt"
+    trajectory_path = "trajectory.txt"
 
     if os.path.exists(trajectory_path):
         poses = load_tum_trajectory(trajectory_path)

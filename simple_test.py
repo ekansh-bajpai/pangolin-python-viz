@@ -1148,7 +1148,7 @@ def main() -> None:
     """
     Demonstration.
 
-    If 'viz/trajectory.txt' exists, it is loaded as a TUM trajectory:
+    If 'trajectory.txt' exists, it is loaded as a TUM trajectory:
         timestamp tx ty tz qx qy qz qw
 
     Otherwise an artificial trajectory is generated.
@@ -1231,10 +1231,10 @@ def main() -> None:
 
     # Load or generate trajectory
     try:
-        poses = load_tum_trajectory("viz/trajectory.txt")
-        print(f"Loaded {len(poses)} poses from viz/trajectory.txt")
+        poses = load_tum_trajectory("trajectory.txt")
+        print(f"Loaded {len(poses)} poses from trajectory.txt")
     except FileNotFoundError:
-        print("viz/trajectory.txt not found. Generating artificial trajectory.")
+        print("trajectory.txt not found. Generating artificial trajectory.")
 
         poses = []
         for i in range(300):
