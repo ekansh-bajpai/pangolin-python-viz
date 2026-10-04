@@ -432,8 +432,15 @@ class PointCloud(Drawable):
         glPointSize(self.point_size)
 
         if self.colors is None:
+            # Immediate mode rather than pango.glDrawPoints: that binding only
+            # accepts a list of 3x1 vectors, and an Nx3 array segfaults. Client
+            # arrays (glVertexPointer) also fail here -- PyOpenGL can't resolve
+            # the context pypangolin created on this thread.
             set_gl_color(self.color)
-            pango.glDrawPoints(self.points)
+            glBegin(GL_POINTS)
+            for p in self.points:
+                glVertex3d(float(p[0]), float(p[1]), float(p[2]))
+            glEnd()
             return
 
         glBegin(GL_POINTS)

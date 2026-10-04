@@ -1823,7 +1823,9 @@ viz.spin()
 
 # PointCloud
 
-Draws Nx3 points.
+Draws Nx3 points. Uncolored clouds are drawn with immediate-mode GL (`glBegin`/`glVertex3d`), not
+`pango.glDrawPoints` -- that binding only accepts a list of 3x1 vectors and segfaults on an Nx3
+array (see [Troubleshooting](#troubleshooting)).
 
 ```python
 from visualization import PointCloud
@@ -4001,6 +4003,43 @@ For images loaded with OpenCV, convert BGR to RGB:
 image_bgr = cv2.imread("image.png")
 image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 ```
+
+---
+
+## Segmentation fault when drawing a `PointCloud`
+
+Older builds drew uncolored clouds with `pango.glDrawPoints(points)`. The pypangolin binding only
+accepts a *list* of 3x1 vectors, so passing an Nx3 numpy array crashes the process immediately --
+even with no GL context, and typically on the first point cloud draw (e.g. the first keyframe
+marker in the SuperEventSlam viewer). Fixed in `visualization/objects.py` by drawing with
+`glBegin(GL_POINTS)` / `glVertex3d` instead. If you see a `Fatal Python error: Segmentation fault`
+with `PointCloud.draw` in the traceback, update this submodule.
+
+---
+
+## `OpenGL.error.Error: Attempt to retrieve context when no valid context`
+
+Raised from a PyOpenGL array call (e.g. `glVertexPointer`, `glReadPixels` with a numpy buffer)
+made on a thread that isn't the one owning the Pangolin context -- or, as seen in practice, on
+the render thread even though immediate GL calls work there. PyOpenGL can't resolve the context
+pypangolin created, so it fails on the array-helper path. Use immediate-mode calls
+(`glBegin`/`glVertex*`/`glEnd`) for geometry in custom draw code. If the render thread dies with
+this error, the visualizer's shutdown path ends the whole run early (SLAM stops after the frame
+it was on), so the symptom looks like "the window is waiting for events".
+
+---
+
+## Screenshots and recordings miss the UI panels or the title bar
+
+`PangolinVisualizer.save_image()` reads the back buffer *before* `pango.FinishFrame()`. Pangolin
+draws its UI panels (checkboxes, stats text) inside `FinishFrame()`, so those panels are missing
+from the image. Capture after the swap instead, from `GL_FRONT`, as
+`SLAMVisualizer`'s recorder (`utils/viz_recorder.py` in the parent project) does. This relies on
+the driver keeping the presented image in the front buffer; verified on NVIDIA/X11, not on every
+driver.
+
+The window manager's title bar is outside the GL surface, so no framebuffer read can include it.
+The recorder draws a title strip with the window title instead of capturing the real decoration.
 
 ---
 
