@@ -12,6 +12,19 @@ The framework provides a clean scene/object abstraction over Pangolin so that yo
 
 ---
 
+# Related repositories
+
+Part of the master's thesis *Exploring Neuromorphic Front-Ends for Event-Based SLAM* (Ekansh Bajpai,
+Paderborn University, 2026). All code from the thesis:
+
+| Repository | Contents |
+|---|---|
+| [ekansh-bajpai/snn-devo](https://github.com/ekansh-bajpai/snn-devo) | SNN patch selectors for DEVO: training and evaluation code for the CNN baseline and the temporal-voxel and time-surface SNN variants |
+| [ekansh-bajpai/supereventslam](https://github.com/ekansh-bajpai/supereventslam) | SuperEventSLAM: keyframe selection, map management, loop closure and pose-graph optimisation on top of a DEVO pose front-end and SuperEvent features |
+| [ekansh-bajpai/devo-vo](https://github.com/ekansh-bajpai/devo-vo) | Portable, inference-only subset of DEVO, used by SuperEventSLAM as its pose front-end |
+| [ekansh-bajpai/pangolin-python-viz](https://github.com/ekansh-bajpai/pangolin-python-viz) (this repository) | Pangolin-based live 3D viewer used by SuperEventSLAM |
+| [ekansh-bajpai/Pangolin](https://github.com/ekansh-bajpai/Pangolin) | Pangolin fork (`frozen-working` branch) used to build `pypangolin` |
+
 # Table of Contents
 
 - [Features](#features)
